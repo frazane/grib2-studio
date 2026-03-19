@@ -1,22 +1,37 @@
 // ─────────────────────────────────────────────
-// Tab switching
+// Tab switching (editor | tables | templates)
 // ─────────────────────────────────────────────
 function switchTab(tab) {
   state.tab = tab;
   state.selectedTableId = null;
   state.searchQuery = "";
   document.getElementById("search").value = "";
-  document.getElementById("tab-codes").classList.toggle("active", tab === "codes");
+
+  document.getElementById("tab-editor").classList.toggle("active", tab === "editor");
+  document.getElementById("tab-tables").classList.toggle("active", tab === "tables");
   document.getElementById("tab-templates").classList.toggle("active", tab === "templates");
-  renderSidebar();
-  renderDetail(null);
+
+  const isBrowser = tab === "tables" || tab === "templates";
+  document.getElementById("load-grib2-label").style.display = tab === "editor" ? "" : "none";
+  document.getElementById("browser-content").style.display = isBrowser ? "flex" : "none";
+  document.getElementById("builder-main").style.display   = tab === "editor" ? "flex" : "none";
+
+  if (tab === "editor") {
+    renderBuilderSidebar();
+    renderBuilderDetail();
+  } else {
+    renderSidebar();
+    renderDetail(null);
+  }
 }
 
 // ─────────────────────────────────────────────
 // Sidebar rendering
 // ─────────────────────────────────────────────
 function currentTables() {
-  return state.tab === "codes" ? state.codeTables : state.templateTables;
+  if (state.tab === "tables") return state.codeTables;
+  if (state.tab === "templates") return state.templateTables;
+  return [];
 }
 
 function renderSidebar() {
@@ -64,7 +79,7 @@ function renderDetail(table) {
     return;
   }
 
-  if (state.tab === "codes") {
+  if (state.tab === "tables") {
     detail.innerHTML = renderCodeTable(table);
   } else {
     detail.innerHTML = renderTemplateTable(table);
@@ -116,11 +131,11 @@ function renderTemplateTable(table) {
     // Build reference cell: code table link, flag table link, note
     let ref = "";
     if (e.codeTable) {
-      ref += `Code table: <a class="ref-link" onclick="goToTable('${escAttr(e.codeTable)}','codes')">${escHtml(e.codeTable)}</a>`;
+      ref += `Code table: <a class="ref-link" onclick="goToTable('${escAttr(e.codeTable)}','tables')">${escHtml(e.codeTable)}</a>`;
     }
     if (e.flagTable) {
       if (ref) ref += "<br>";
-      ref += `Flag table: <a class="ref-link" onclick="goToTable('${escAttr(e.flagTable)}','codes')">${escHtml(e.flagTable)}</a>`;
+      ref += `Flag table: <a class="ref-link" onclick="goToTable('${escAttr(e.flagTable)}','tables')">${escHtml(e.flagTable)}</a>`;
     }
     if (e.note && !e.codeTable && !e.flagTable) {
       ref = escHtml(e.note);
@@ -146,9 +161,7 @@ function renderTemplateTable(table) {
 // ─────────────────────────────────────────────
 function goToTable(id, tab) {
   if (state.tab !== tab) {
-    state.tab = tab;
-    document.getElementById("tab-codes").classList.toggle("active", tab === "codes");
-    document.getElementById("tab-templates").classList.toggle("active", tab === "templates");
+    switchTab(tab);
   }
   state.selectedTableId = id;
   state.searchQuery = "";
@@ -189,63 +202,76 @@ function onSearch(query) {
 
 function renderSearchResults(query) {
   const q = query.toLowerCase();
-  const tables = currentTables();
   const detail = document.getElementById("detail");
 
-  // Gather all matching entries across all tables
-  let hits = [];
-  tables.forEach(table => {
+  // Gather hits from code/flag tables
+  let codeHits = [];
+  state.codeTables.forEach(table => {
     table.entries.forEach(e => {
-      const haystack = [
-        table.type, table.id, table.title,
-        e.code || "", e.meaning || "", e.contents || "", e.note || "",
-      ].join(" ").toLowerCase();
-
-      if (haystack.includes(q)) {
-        hits.push({ table, entry: e });
-      }
+      const haystack = [table.type, table.id, table.title, e.code || "", e.meaning || ""].join(" ").toLowerCase();
+      if (haystack.includes(q)) codeHits.push({ table, entry: e });
     });
   });
 
-  if (!hits.length) {
+  // Gather hits from template tables
+  let templateHits = [];
+  state.templateTables.forEach(table => {
+    table.entries.forEach(e => {
+      const haystack = [table.type, table.id, table.title, e.contents || "", e.note || ""].join(" ").toLowerCase();
+      if (haystack.includes(q)) templateHits.push({ table, entry: e });
+    });
+  });
+
+  const totalHits = codeHits.length + templateHits.length;
+  if (!totalHits) {
     detail.innerHTML = `<div style="padding:20px;color:#aaa">No results for "${escHtml(query)}"</div>`;
     return;
   }
 
-  const label = state.tab === "codes" ? "code/flag tables" : "templates";
-  let html = `<h3 style="margin-bottom:12px">${hits.length} result${hits.length!==1?"s":""} for "${escHtml(query)}" across ${label}</h3>
-    <table>
-    <thead><tr>
-      <th style="width:140px">Table</th>`;
+  let html = `<h3 style="margin-bottom:12px">${totalHits} result${totalHits !== 1 ? "s" : ""} for "${escHtml(query)}"</h3>`;
 
-  if (state.tab === "codes") {
-    html += `<th style="width:90px">Code</th><th>Meaning</th><th style="width:90px">Status</th>`;
-  } else {
-    html += `<th style="width:80px">Octet(s)</th><th>Contents</th><th style="width:90px">Status</th>`;
-  }
-  html += `</tr></thead><tbody>`;
-
-  hits.forEach(({ table, entry: e }) => {
-    const statusCls = e.status === "Deprecated" ? "status-deprecated" : "status-operational";
-    const tableRef = `<a class="ref-link" onclick="selectTable('${escAttr(table.id)}')">${escHtml(table.type)} ${escHtml(table.id)}</a>`;
-    if (state.tab === "codes") {
+  if (codeHits.length > 0) {
+    html += `<h4 style="margin:12px 0 6px;color:#555">Code &amp; Flag Tables (${codeHits.length})</h4>
+      <table><thead><tr>
+        <th style="width:140px">Table</th>
+        <th style="width:90px">Code</th>
+        <th>Meaning</th>
+        <th style="width:90px">Status</th>
+      </tr></thead><tbody>`;
+    codeHits.forEach(({ table, entry: e }) => {
+      const statusCls = e.status === "Deprecated" ? "status-deprecated" : "status-operational";
+      const tableRef = `<a class="ref-link" onclick="goToTable('${escAttr(table.id)}','tables')">${escHtml(table.type)} ${escHtml(table.id)}</a>`;
       html += `<tr>
         <td>${tableRef}<br><small>${escHtml(table.title)}</small></td>
         <td><code>${escHtml(e.code)}</code></td>
         <td>${highlight(escHtml(e.meaning), query)}</td>
         <td class="${statusCls}">${escHtml(e.status)}</td>
       </tr>`;
-    } else {
+    });
+    html += `</tbody></table>`;
+  }
+
+  if (templateHits.length > 0) {
+    html += `<h4 style="margin:16px 0 6px;color:#555">Templates (${templateHits.length})</h4>
+      <table><thead><tr>
+        <th style="width:140px">Table</th>
+        <th style="width:80px">Octet(s)</th>
+        <th>Contents</th>
+        <th style="width:90px">Status</th>
+      </tr></thead><tbody>`;
+    templateHits.forEach(({ table, entry: e }) => {
+      const statusCls = e.status === "Deprecated" ? "status-deprecated" : "status-operational";
+      const tableRef = `<a class="ref-link" onclick="goToTable('${escAttr(table.id)}','templates')">${escHtml(table.type)} ${escHtml(table.id)}</a>`;
       html += `<tr>
         <td>${tableRef}<br><small>${escHtml(table.title)}</small></td>
         <td><code>${escHtml(e.octetNo)}</code></td>
         <td>${highlight(escHtml(e.contents), query)}</td>
         <td class="${statusCls}">${escHtml(e.status)}</td>
       </tr>`;
-    }
-  });
+    });
+    html += `</tbody></table>`;
+  }
 
-  html += `</tbody></table>`;
   detail.innerHTML = html;
 }
 

@@ -6,9 +6,9 @@ https://frazane.github.io/grib2-studio
 
 ## Features
 
-**Browser tab** — browse all WMO GRIB2 code/flag tables and section templates. Search across all tables with highlighted results. Cross-reference links let you jump directly from a template field to the code table that defines its values.
-
 **Editor tab** — a 9-step wizard that walks through each GRIB2 section (0–7). Template-driven steps let you pick a template and fill in its fields. The final step validates field ranges, assembles a binary GRIB2 message, and offers download or a hex dump preview.
+
+**Tables tab** — browse all WMO GRIB2 code/flag tables. **Templates tab** — browse all section template definitions. Search applies to both simultaneously, with results grouped by type. Cross-reference links let you jump directly from a template field to the code table that defines its values.
 
 You can also load an existing `.grib2` file into the editor, which decodes it and populates all sections for inspection or modification.
 

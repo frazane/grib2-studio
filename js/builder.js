@@ -1,36 +1,12 @@
 // ─────────────────────────────────────────────
-// Top-level tab switching (Browser ↔ Builder)
+// Cross-tab navigation from the editor
 // ─────────────────────────────────────────────
-let topTab = "browser";
 
-// Navigate from builder to a table in the browser tab.
-// builderState is untouched; switching back via the Builder tab restores the view.
+// Navigate from the editor to a table in the Tables or Templates tab.
+// builderState is untouched; switching back via the Editor tab restores the view.
 function goToTableFromBuilder(id, tab) {
-  switchTopTab("browser");
+  switchTab(tab);
   goToTable(id, tab);
-}
-
-function switchTopTab(tab) {
-  topTab = tab;
-  document.getElementById("top-tab-browser").classList.toggle("active", tab === "browser");
-  document.getElementById("top-tab-builder").classList.toggle("active", tab === "builder");
-
-  // Show / hide browser-only / builder-only topbar elements
-  document.querySelectorAll(".browser-only").forEach(el => {
-    el.style.display = tab === "browser" ? "" : "none";
-  });
-  document.querySelectorAll(".builder-only").forEach(el => {
-    el.style.display = tab === "builder" ? "" : "none";
-  });
-
-  // Show / hide content panes
-  document.getElementById("browser-content").style.display = tab === "browser" ? "flex" : "none";
-  document.getElementById("builder-main").style.display    = tab === "builder" ? "flex" : "none";
-
-  if (tab === "builder") {
-    renderBuilderSidebar();
-    renderBuilderDetail();
-  }
 }
 
 // ─────────────────────────────────────────────
@@ -215,7 +191,7 @@ function bTypeTag(ftype, inferred = false) {
 
 // Clickable "Code table X.X" hint that navigates to the browser tab
 function bCodeTableHint(tableId) {
-  return `<span class="field-hint">Code table <a class="ref-link" onclick="goToTableFromBuilder('${escAttr(tableId)}','codes')">${escHtml(tableId)}</a></span>`;
+  return `<span class="field-hint">Code table <a class="ref-link" onclick="goToTableFromBuilder('${escAttr(tableId)}','tables')">${escHtml(tableId)}</a></span>`;
 }
 
 // Standard table header for builder sections

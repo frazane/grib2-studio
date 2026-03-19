@@ -10,7 +10,7 @@ const TEMPLATE_URL = "data/Template.xml";
 // Global state
 // ─────────────────────────────────────────────
 let state = {
-  tab: "codes",          // "codes" | "templates"
+  tab: "editor",         // "editor" | "tables" | "templates"
   codeTables: [],        // [{id, type, title, subTables, entries}]
   templateTables: [],    // [{id, type, title, entries}]
   codeIndex: new Map(),  // tableId -> table (for cross-ref links)
@@ -69,7 +69,8 @@ async function init() {
       `${codeTables.length} code/flag tables · ${templateTables.length} templates · WMO tables ${WMO_TABLES_VERSION} · app v${APP_VERSION}`;
 
     loadingEl.style.display = "none";
-    renderSidebar();
+    renderBuilderSidebar();
+    renderBuilderDetail();
 
   } catch (err) {
     loadingEl.style.display = "none";
