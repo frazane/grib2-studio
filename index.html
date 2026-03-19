@@ -231,22 +231,14 @@
     .type-codetable { background: #f3e5f5; color: #6a1b9a; border: 1px solid #ce93d8; }
 
     /* ── builder form rows ── */
-    .builder-field {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-      padding: 5px 0;
-      border-bottom: 1px solid #f0f0f0;
+    .field-hint {
+      font-size: 11px;
+      color: #888;
+      margin-left: 4px;
     }
-    .builder-field label { flex: 1; font-size: 12px; color: #444; min-width: 0; }
-    .builder-field .octets { font-size: 11px; color: #999; flex: 0 0 50px; text-align: right; white-space: nowrap; }
-    .builder-field input, .builder-field select {
-      flex: 0 0 260px;
-      padding: 3px 6px;
-      font-family: monospace;
-      font-size: 13px;
-      border: 1px solid #aaa;
-    }
+    select { max-width: 500px; }
+    input[type="number"] { width: 140px; font-family: monospace; font-size: 13px; padding: 3px 6px; border: 1px solid #aaa; }
+    #builder-detail select { font-family: monospace; font-size: 13px; padding: 3px 6px; border: 1px solid #aaa; background: #fff; }
 
     /* ── builder navigation buttons ── */
     .builder-nav {
@@ -276,14 +268,18 @@
     #hex-dump {
       font-family: monospace;
       font-size: 12px;
-      background: #1e1e1e;
-      color: #d4d4d4;
-      padding: 12px;
-      border-radius: 4px;
-      overflow-x: auto;
+      line-height: 1.6;
+      background: #f8f8f8;
+      border: 1px solid #ddd;
+      padding: 10px;
+      max-height: 400px;
+      overflow-y: auto;
       white-space: pre;
       margin-top: 8px;
     }
+    .hex-offset { color: #999; }
+    .hex-byte   { color: #333; }
+    .hex-ascii  { color: #666; margin-left: 8px; }
   </style>
 </head>
 <body>
@@ -914,29 +910,70 @@ function builderNext(stepId) {
 }
 
 // ─────────────────────────────────────────────
+// Builder — shared helpers
+// ─────────────────────────────────────────────
+
+// Build a <select> from a code table + append "Code table X.X" hint
+function builderCodeSelect(tableId, curVal, onchangeExpr) {
+  const tbl = state.codeIndex.get(tableId);
+  if (!tbl) {
+    return `<input type="number" min="0" value="${curVal}" onchange="${onchangeExpr}" />
+      <span class="field-hint">Code table ${escHtml(tableId)} not loaded</span>`;
+  }
+  let html = `<select onchange="${onchangeExpr}">`;
+  tbl.entries.forEach(e => {
+    const c = (e.code || "").trim();
+    if (!c || c.includes("-")) return;
+    if (e.status === "Deprecated") return;
+    if (/^reserved$/i.test(e.meaning.trim()) || /^missing$/i.test(e.meaning.trim())) return;
+    const sel = String(e.code) === String(curVal) ? " selected" : "";
+    html += `<option value="${escHtml(e.code)}"${sel}>${escHtml(e.code)} — ${escHtml(e.meaning)}</option>`;
+  });
+  html += `</select> <span class="field-hint">Code table ${escHtml(tableId)}</span>`;
+  return html;
+}
+
+// Type badge helper
+function bTypeTag(ftype) {
+  const map = {
+    codetable: ["type-codetable", "codetable"],
+    ieeefloat: ["type-float",     "IEEE float"],
+    signed:    ["type-signed",    "signed"],
+    unsigned:  ["type-unsigned",  "unsigned"],
+  };
+  const [cls, label] = map[ftype] || ["type-unsigned", "unsigned"];
+  return `<span class="type-tag ${cls}">${label}</span>`;
+}
+
+// Standard table header for builder sections
+function bTableHead() {
+  return `<table><thead><tr>
+    <th style="width:90px">Octet(s)</th>
+    <th>Contents</th>
+    <th style="width:320px">Value</th>
+  </tr></thead><tbody>`;
+}
+
+// ─────────────────────────────────────────────
 // Builder — Step 0: Section 0 (Discipline)
 // ─────────────────────────────────────────────
 function renderBuilderStep0() {
-  const table = state.codeIndex.get("0.0");
-  let html = `<h2>Section 0 — Indicator</h2>
-    <p class="subtitle">Select the discipline of the GRIB2 message (Code Table 0.0).</p>
-    <div class="builder-field">
-      <label>Discipline <span class="type-tag type-codetable">codetable</span></label>
-      <span class="octets">7</span>
-      <select onchange="builderState.s0.discipline=+this.value">`;
-  if (table) {
-    table.entries.forEach(e => {
-      if (e.code && /^\d+$/.test(e.code) && e.status !== "Deprecated") {
-        const sel = +e.code === builderState.s0.discipline ? " selected" : "";
-        html += `<option value="${e.code}"${sel}>${e.code} — ${escHtml(e.meaning)}</option>`;
-      }
-    });
-  } else {
-    html += `<option value="0" selected>0 — Meteorological products</option>`;
-  }
-  html += `</select></div>`;
-  html += builderNavHtml(0);
-  return html;
+  const bs = builderState.s0;
+  return `
+    <h2>Section 0 — Indicator</h2>
+    <div class="subtitle">The indicator section identifies the start of a GRIB message and the discipline.</div>
+    ${bTableHead()}
+      <tr><td><code>1–4</code></td><td>GRIB (coded as ASCII)</td><td><code>GRIB</code> (fixed)</td></tr>
+      <tr><td><code>5–6</code></td><td>Reserved</td><td><code>0</code> (fixed)</td></tr>
+      <tr>
+        <td><code>7</code></td>
+        <td>Discipline ${bTypeTag("unsigned")}</td>
+        <td>${builderCodeSelect("0.0", bs.discipline, "builderState.s0.discipline=+this.value")}</td>
+      </tr>
+      <tr><td><code>8</code></td><td>GRIB Edition Number</td><td><code>2</code> (fixed)</td></tr>
+      <tr><td><code>9–16</code></td><td>Total length of GRIB message in octets</td><td><em>computed at build</em></td></tr>
+    </tbody></table>
+    ${builderNavHtml(0)}`;
 }
 
 // ─────────────────────────────────────────────
@@ -944,180 +981,178 @@ function renderBuilderStep0() {
 // ─────────────────────────────────────────────
 function renderBuilderStep1() {
   const bs = builderState.s1;
-
-  function codeSelectHtml(id, tableId, curVal, onchangeExpr) {
-    const tbl = state.codeIndex.get(tableId);
-    if (!tbl) return `<input type="number" id="${id}" min="0" value="${curVal}" onchange="${onchangeExpr}" />`;
-    let s = `<select id="${id}" onchange="${onchangeExpr}">`;
-    tbl.entries.forEach(e => {
-      if (e.code && /^\d+$/.test(e.code) && e.status !== "Deprecated") {
-        const sel = +e.code === +curVal ? " selected" : "";
-        s += `<option value="${e.code}"${sel}>${e.code} — ${escHtml(e.meaning)}</option>`;
-      }
-    });
-    s += `</select>`;
-    return s;
-  }
-
-  let html = `<h2>Section 1 — Identification</h2>
-    <p class="subtitle">Configure the identification section (21 bytes, fixed layout).</p>
-    <div class="builder-field">
-      <label>Originating Centre <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">6–7</span>
-      <input type="number" min="0" max="65534" value="${bs.originatingCentre}" onchange="builderState.s1.originatingCentre=+this.value" />
-    </div>
-    <div class="builder-field">
-      <label>Originating Sub-Centre <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">8–9</span>
-      <input type="number" min="0" max="65534" value="${bs.originatingSubCentre}" onchange="builderState.s1.originatingSubCentre=+this.value" />
-    </div>
-    <div class="builder-field">
-      <label>Master Tables Version Number <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">10</span>
-      <input type="number" min="0" max="255" value="${bs.masterTablesVersion}" onchange="builderState.s1.masterTablesVersion=+this.value" />
-    </div>
-    <div class="builder-field">
-      <label>Local Tables Version Number <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">11</span>
-      <input type="number" min="0" max="255" value="${bs.localTablesVersion}" onchange="builderState.s1.localTablesVersion=+this.value" />
-    </div>
-    <div class="builder-field">
-      <label>Significance of Reference Time <span class="type-tag type-codetable">codetable</span></label>
-      <span class="octets">12</span>
-      ${codeSelectHtml("b-s1-srt", "1.2", bs.significanceOfRefTime, "builderState.s1.significanceOfRefTime=+this.value")}
-    </div>
-    <div class="builder-field">
-      <label>Year <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">13–14</span>
-      <input type="number" min="1" max="9999" value="${bs.year}" onchange="builderState.s1.year=+this.value" />
-    </div>
-    <div class="builder-field">
-      <label>Month <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">15</span>
-      <input type="number" min="1" max="12" value="${bs.month}" onchange="builderState.s1.month=+this.value" />
-    </div>
-    <div class="builder-field">
-      <label>Day <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">16</span>
-      <input type="number" min="1" max="31" value="${bs.day}" onchange="builderState.s1.day=+this.value" />
-    </div>
-    <div class="builder-field">
-      <label>Hour <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">17</span>
-      <input type="number" min="0" max="23" value="${bs.hour}" onchange="builderState.s1.hour=+this.value" />
-    </div>
-    <div class="builder-field">
-      <label>Minute <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">18</span>
-      <input type="number" min="0" max="59" value="${bs.minute}" onchange="builderState.s1.minute=+this.value" />
-    </div>
-    <div class="builder-field">
-      <label>Second <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">19</span>
-      <input type="number" min="0" max="59" value="${bs.second}" onchange="builderState.s1.second=+this.value" />
-    </div>
-    <div class="builder-field">
-      <label>Production Status of Processed Data <span class="type-tag type-codetable">codetable</span></label>
-      <span class="octets">20</span>
-      ${codeSelectHtml("b-s1-ps", "1.3", bs.productionStatus, "builderState.s1.productionStatus=+this.value")}
-    </div>
-    <div class="builder-field">
-      <label>Type of Processed Data <span class="type-tag type-codetable">codetable</span></label>
-      <span class="octets">21</span>
-      ${codeSelectHtml("b-s1-td", "1.4", bs.typeOfData, "builderState.s1.typeOfData=+this.value")}
-    </div>`;
-  html += builderNavHtml(1);
-  return html;
+  return `
+    <h2>Section 1 — Identification</h2>
+    <div class="subtitle">Identifies the originating centre and reference time.</div>
+    ${bTableHead()}
+      <tr><td><code>1–4</code></td><td>Length of section</td><td><code>21</code> (fixed)</td></tr>
+      <tr><td><code>5</code></td><td>Section number</td><td><code>1</code> (fixed)</td></tr>
+      <tr>
+        <td><code>6–7</code></td>
+        <td>Originating centre ${bTypeTag("unsigned")}</td>
+        <td><input type="number" min="0" max="65535" value="${bs.originatingCentre}"
+              onchange="builderState.s1.originatingCentre=+this.value" />
+            <span class="field-hint">Common table C-11</span></td>
+      </tr>
+      <tr>
+        <td><code>8–9</code></td>
+        <td>Originating sub-centre ${bTypeTag("unsigned")}</td>
+        <td><input type="number" min="0" max="65535" value="${bs.originatingSubCentre}"
+              onchange="builderState.s1.originatingSubCentre=+this.value" /></td>
+      </tr>
+      <tr>
+        <td><code>10</code></td>
+        <td>Master tables version number ${bTypeTag("unsigned")}</td>
+        <td><input type="number" min="0" max="255" value="${bs.masterTablesVersion}"
+              onchange="builderState.s1.masterTablesVersion=+this.value" />
+            <span class="field-hint">Code table 1.0</span></td>
+      </tr>
+      <tr>
+        <td><code>11</code></td>
+        <td>Local tables version number ${bTypeTag("unsigned")}</td>
+        <td><input type="number" min="0" max="255" value="${bs.localTablesVersion}"
+              onchange="builderState.s1.localTablesVersion=+this.value" />
+            <span class="field-hint">Code table 1.1</span></td>
+      </tr>
+      <tr>
+        <td><code>12</code></td>
+        <td>Significance of reference time ${bTypeTag("unsigned")}</td>
+        <td>${builderCodeSelect("1.2", bs.significanceOfRefTime, "builderState.s1.significanceOfRefTime=+this.value")}</td>
+      </tr>
+      <tr>
+        <td><code>13–14</code></td>
+        <td>Year ${bTypeTag("unsigned")}</td>
+        <td><input type="number" min="1" max="9999" value="${bs.year}"
+              onchange="builderState.s1.year=+this.value" /></td>
+      </tr>
+      <tr>
+        <td><code>15</code></td>
+        <td>Month ${bTypeTag("unsigned")}</td>
+        <td><input type="number" min="1" max="12" value="${bs.month}"
+              onchange="builderState.s1.month=+this.value" /></td>
+      </tr>
+      <tr>
+        <td><code>16</code></td>
+        <td>Day ${bTypeTag("unsigned")}</td>
+        <td><input type="number" min="1" max="31" value="${bs.day}"
+              onchange="builderState.s1.day=+this.value" /></td>
+      </tr>
+      <tr>
+        <td><code>17</code></td>
+        <td>Hour ${bTypeTag("unsigned")}</td>
+        <td><input type="number" min="0" max="23" value="${bs.hour}"
+              onchange="builderState.s1.hour=+this.value" /></td>
+      </tr>
+      <tr>
+        <td><code>18</code></td>
+        <td>Minute ${bTypeTag("unsigned")}</td>
+        <td><input type="number" min="0" max="59" value="${bs.minute}"
+              onchange="builderState.s1.minute=+this.value" /></td>
+      </tr>
+      <tr>
+        <td><code>19</code></td>
+        <td>Second ${bTypeTag("unsigned")}</td>
+        <td><input type="number" min="0" max="59" value="${bs.second}"
+              onchange="builderState.s1.second=+this.value" /></td>
+      </tr>
+      <tr>
+        <td><code>20</code></td>
+        <td>Production status of processed data ${bTypeTag("unsigned")}</td>
+        <td>${builderCodeSelect("1.3", bs.productionStatus, "builderState.s1.productionStatus=+this.value")}</td>
+      </tr>
+      <tr>
+        <td><code>21</code></td>
+        <td>Type of processed data ${bTypeTag("unsigned")}</td>
+        <td>${builderCodeSelect("1.4", bs.typeOfData, "builderState.s1.typeOfData=+this.value")}</td>
+      </tr>
+    </tbody></table>
+    ${builderNavHtml(1)}`;
 }
 
 // ─────────────────────────────────────────────
 // Builder — Step 2: Section 2 (Local Use — empty)
 // ─────────────────────────────────────────────
 function renderBuilderStep2() {
-  let html = `<h2>Section 2 — Local Use</h2>
-    <p class="subtitle">Local Use section is always empty in this builder (5 bytes total).</p>
-    <div style="padding:14px;background:#f9f9f9;border:1px solid #eee;color:#888;font-style:italic">
-      No data — Section 2 will be written as empty (length = 5, section number = 2).
-    </div>`;
-  html += builderNavHtml(2);
-  return html;
+  return `
+    <h2>Section 2 — Local Use</h2>
+    <div class="subtitle">This section is reserved for local use by the originating centre. We leave it empty.</div>
+    ${bTableHead()}
+      <tr><td><code>1–4</code></td><td>Length of section</td><td><code>5</code> (fixed)</td></tr>
+      <tr><td><code>5</code></td><td>Section number</td><td><code>2</code> (fixed)</td></tr>
+    </tbody></table>
+    <div style="margin-top:10px;color:#666;font-size:12px">No local-use data included.</div>
+    ${builderNavHtml(2)}`;
 }
 
 // ─────────────────────────────────────────────
 // Builder — Template steps helper (Sections 3, 4, 5)
 // ─────────────────────────────────────────────
-function renderTemplateStep(stepId, sectionKey, heading, templatePrefix, extraHeaderHtml) {
+function renderTemplateStep(stepId, sectionKey, heading, subtitle, templatePrefix, sectionHeaderRows) {
   const bs = builderState[sectionKey];
   const templates = state.templateTables.filter(t => t.id.startsWith(templatePrefix + "."));
 
-  let html = `<h2>${heading}</h2>`;
-
-  // Template picker
-  html += `<div class="builder-field">
-    <label style="font-weight:bold">Template <span class="type-tag type-codetable">codetable</span></label>
-    <span class="octets"></span>
-    <select onchange="onBuilderTemplateChange('${sectionKey}',this.value)">
-      <option value="">— select a template —</option>`;
+  // Template picker row
+  let html = `
+    <h2>${heading}</h2>
+    <div class="subtitle">${subtitle}</div>
+    ${bTableHead()}
+      ${sectionHeaderRows}
+      <tr>
+        <td></td>
+        <td>Template ${bTypeTag("codetable")}</td>
+        <td><select onchange="onBuilderTemplateChange('${sectionKey}',this.value)">
+          <option value="">— Select a template —</option>`;
   templates.forEach(t => {
     const sel = t.id === bs.templateId ? " selected" : "";
-    html += `<option value="${t.id}"${sel}>${escHtml(t.type)} ${escHtml(t.id)} — ${escHtml(t.title)}</option>`;
+    html += `<option value="${t.id}"${sel}>${escHtml(t.id)} — ${escHtml(t.title)}</option>`;
   });
-  html += `</select></div>`;
+  html += `</select></td></tr>`;
 
-  // Fixed section-header fields
-  html += extraHeaderHtml;
-
-  // Dynamic template fields
+  // Template fields
   if (bs.templateId) {
     const tmpl = state.templateTables.find(t => t.id === bs.templateId);
     if (tmpl) {
-      html += `<h3 style="margin:16px 0 8px;font-size:13px;color:#555;border-top:1px solid #eee;padding-top:12px">Template Fields</h3>`;
+      html += `<tr><td colspan="3" style="background:#f0f0f0;font-weight:bold;font-size:12px;padding:5px 8px">
+        Template ${escHtml(bs.templateId)} fields</td></tr>`;
       tmpl.entries.forEach((entry, idx) => {
         const range = parseOctetRange(entry.octetNo);
         if (range.length === 0) return;
-
         const tableRef = entry.codeTable || entry.flagTable;
         const ftype    = tableRef ? "codetable" : detectFieldType(entry.contents);
         const curVal   = bs.fields[idx] !== undefined ? bs.fields[idx] : 0;
+        const byteCount = range.length;
 
-        const tagClass = { codetable: "type-codetable", ieeefloat: "type-float",
-                           signed: "type-signed", unsigned: "type-unsigned" }[ftype];
-        const tagLabel = { codetable: "codetable", ieeefloat: "IEEE float",
-                           signed: "signed", unsigned: "unsigned" }[ftype];
-        const tag = `<span class="type-tag ${tagClass}">${tagLabel}</span>`;
-
-        let inputHtml;
+        let valueCell;
         if (ftype === "codetable") {
-          const tblData = state.codeIndex.get(tableRef);
-          if (tblData) {
-            inputHtml = `<select onchange="builderState['${sectionKey}'].fields[${idx}]=+this.value">`;
-            tblData.entries.forEach(te => {
-              if (te.code && /^\d+$/.test(te.code) && te.status !== "Deprecated") {
-                const sel = +te.code === +curVal ? " selected" : "";
-                inputHtml += `<option value="${te.code}"${sel}>${te.code} — ${escHtml(te.meaning)}</option>`;
-              }
-            });
-            inputHtml += `</select>`;
-          } else {
-            inputHtml = `<input type="number" min="0" value="${curVal}" onchange="builderState['${sectionKey}'].fields[${idx}]=+this.value" />`;
-          }
+          valueCell = builderCodeSelect(tableRef, curVal,
+            `builderState['${sectionKey}'].fields[${idx}]=+this.value`);
         } else if (ftype === "ieeefloat") {
-          inputHtml = `<input type="number" step="any" value="${curVal}" onchange="builderState['${sectionKey}'].fields[${idx}]=parseFloat(this.value)||0" />`;
+          valueCell = `<input type="number" step="any" value="${curVal}"
+            onchange="builderState['${sectionKey}'].fields[${idx}]=parseFloat(this.value)||0" />
+            <span class="field-hint">${byteCount} byte(s)</span>`;
         } else if (ftype === "signed") {
-          inputHtml = `<input type="number" value="${curVal}" onchange="builderState['${sectionKey}'].fields[${idx}]=+this.value" />`;
+          const maxPos = byteCount > 0 ? Math.pow(2, byteCount * 8 - 1) - 1 : 2147483647;
+          const minNeg = -maxPos - 1;
+          valueCell = `<input type="number" min="${minNeg}" max="${maxPos}" value="${curVal}"
+            onchange="builderState['${sectionKey}'].fields[${idx}]=+this.value" />
+            <span class="field-hint">${byteCount} byte(s)</span>`;
         } else {
-          inputHtml = `<input type="number" min="0" value="${curVal}" onchange="builderState['${sectionKey}'].fields[${idx}]=+this.value" />`;
+          const maxVal = byteCount > 0 ? Math.pow(256, byteCount) - 1 : 4294967295;
+          valueCell = `<input type="number" min="0" max="${maxVal}" value="${curVal}"
+            onchange="builderState['${sectionKey}'].fields[${idx}]=+this.value" />
+            <span class="field-hint">${byteCount} byte(s)</span>`;
         }
 
-        html += `<div class="builder-field">
-          <label>${escHtml(entry.contents)} ${tag}</label>
-          <span class="octets">${escHtml(entry.octetNo)}</span>
-          ${inputHtml}
-        </div>`;
+        html += `<tr>
+          <td><code>${escHtml(entry.octetNo)}</code></td>
+          <td>${escHtml(entry.contents)} ${bTypeTag(ftype)}</td>
+          <td>${valueCell}</td>
+        </tr>`;
       });
     }
   }
 
+  html += `</tbody></table>`;
   html += builderNavHtml(stepId);
   return html;
 }
@@ -1133,23 +1168,41 @@ function onBuilderTemplateChange(sectionKey, templateId) {
 // ─────────────────────────────────────────────
 function renderBuilderStep3() {
   const bs = builderState.s3;
-  const extra = `
-    <div class="builder-field">
-      <label>Source of Grid Definition <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">6</span>
-      <input type="number" min="0" max="255" value="${bs.sourceOfGridDef}" onchange="builderState.s3.sourceOfGridDef=+this.value" />
-    </div>
-    <div class="builder-field">
-      <label>Number of Data Points <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">7–10</span>
-      <input type="number" min="0" value="${bs.numberOfDataPoints}" onchange="builderState.s3.numberOfDataPoints=+this.value" />
-    </div>
-    <div class="builder-field">
-      <label>Interpretation of List of Numbers <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">12</span>
-      <input type="number" min="0" max="255" value="${bs.interpretationOfListOfNumbers}" onchange="builderState.s3.interpretationOfListOfNumbers=+this.value" />
-    </div>`;
-  return renderTemplateStep(3, "s3", "Section 3 — Grid Definition", "3", extra);
+  const headerRows = `
+    <tr><td><code>1–4</code></td><td>Length of section</td><td><em>computed at build</em></td></tr>
+    <tr><td><code>5</code></td><td>Section number</td><td><code>3</code> (fixed)</td></tr>
+    <tr>
+      <td><code>6</code></td>
+      <td>Source of grid definition ${bTypeTag("unsigned")}</td>
+      <td><input type="number" min="0" max="255" value="${bs.sourceOfGridDef}"
+            onchange="builderState.s3.sourceOfGridDef=+this.value" /></td>
+    </tr>
+    <tr>
+      <td><code>7–10</code></td>
+      <td>Number of data points ${bTypeTag("unsigned")}</td>
+      <td><input type="number" min="0" value="${bs.numberOfDataPoints}"
+            onchange="builderState.s3.numberOfDataPoints=+this.value" /></td>
+    </tr>
+    <tr>
+      <td><code>11</code></td>
+      <td>Number of octets for optional list</td>
+      <td><code>0</code> (fixed)</td>
+    </tr>
+    <tr>
+      <td><code>12</code></td>
+      <td>Interpretation of list of numbers ${bTypeTag("unsigned")}</td>
+      <td><input type="number" min="0" max="255" value="${bs.interpretationOfListOfNumbers}"
+            onchange="builderState.s3.interpretationOfListOfNumbers=+this.value" /></td>
+    </tr>
+    <tr>
+      <td><code>13–14</code></td>
+      <td>Grid definition template number ${bTypeTag("unsigned")}</td>
+      <td><em>set by template selection below</em></td>
+    </tr>`;
+  return renderTemplateStep(3, "s3",
+    "Section 3 — Grid Definition",
+    "Defines the grid/projection used. Choose a grid definition template, then set each field.",
+    "3", headerRows);
 }
 
 // ─────────────────────────────────────────────
@@ -1157,13 +1210,24 @@ function renderBuilderStep3() {
 // ─────────────────────────────────────────────
 function renderBuilderStep4() {
   const bs = builderState.s4;
-  const extra = `
-    <div class="builder-field">
-      <label>Number of Coordinate Values <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">6–7</span>
-      <input type="number" min="0" value="${bs.numberOfCoordValues}" onchange="builderState.s4.numberOfCoordValues=+this.value" />
-    </div>`;
-  return renderTemplateStep(4, "s4", "Section 4 — Product Definition", "4", extra);
+  const headerRows = `
+    <tr><td><code>1–4</code></td><td>Length of section</td><td><em>computed at build</em></td></tr>
+    <tr><td><code>5</code></td><td>Section number</td><td><code>4</code> (fixed)</td></tr>
+    <tr>
+      <td><code>6–7</code></td>
+      <td>Number of coordinate values ${bTypeTag("unsigned")}</td>
+      <td><input type="number" min="0" value="${bs.numberOfCoordValues}"
+            onchange="builderState.s4.numberOfCoordValues=+this.value" /></td>
+    </tr>
+    <tr>
+      <td><code>8–9</code></td>
+      <td>Product definition template number ${bTypeTag("unsigned")}</td>
+      <td><em>set by template selection below</em></td>
+    </tr>`;
+  return renderTemplateStep(4, "s4",
+    "Section 4 — Product Definition",
+    "Describes the parameter, generating process, and time. Choose a product definition template.",
+    "4", headerRows);
 }
 
 // ─────────────────────────────────────────────
@@ -1171,52 +1235,58 @@ function renderBuilderStep4() {
 // ─────────────────────────────────────────────
 function renderBuilderStep5() {
   const bs = builderState.s5;
-  const extra = `
-    <div class="builder-field">
-      <label>Number of Packed Values <span class="type-tag type-unsigned">unsigned</span></label>
-      <span class="octets">6–9</span>
-      <input type="number" min="0" value="${bs.numberOfPackedValues}" onchange="builderState.s5.numberOfPackedValues=+this.value" />
-    </div>`;
-  return renderTemplateStep(5, "s5", "Section 5 — Data Representation", "5", extra);
+  const headerRows = `
+    <tr><td><code>1–4</code></td><td>Length of section</td><td><em>computed at build</em></td></tr>
+    <tr><td><code>5</code></td><td>Section number</td><td><code>5</code> (fixed)</td></tr>
+    <tr>
+      <td><code>6–9</code></td>
+      <td>Number of packed values ${bTypeTag("unsigned")}</td>
+      <td><input type="number" min="0" value="${bs.numberOfPackedValues}"
+            onchange="builderState.s5.numberOfPackedValues=+this.value" /></td>
+    </tr>
+    <tr>
+      <td><code>10–11</code></td>
+      <td>Data representation template number ${bTypeTag("unsigned")}</td>
+      <td><em>set by template selection below</em></td>
+    </tr>`;
+  return renderTemplateStep(5, "s5",
+    "Section 5 — Data Representation",
+    "Describes how data values are packed. Choose a data representation template.",
+    "5", headerRows);
 }
 
 // ─────────────────────────────────────────────
 // Builder — Step 6: Section 6 (Bitmap)
 // ─────────────────────────────────────────────
 function renderBuilderStep6() {
-  const table = state.codeIndex.get("6.0");
-  let html = `<h2>Section 6 — Bitmap</h2>
-    <p class="subtitle">Bitmap indicator (Code Table 6.0). Use 255 for no bitmap.</p>
-    <div class="builder-field">
-      <label>Bitmap Indicator <span class="type-tag type-codetable">codetable</span></label>
-      <span class="octets">6</span>
-      <select onchange="builderState.s6.bitmapIndicator=+this.value">`;
-  if (table) {
-    table.entries.forEach(e => {
-      if (e.code && /^\d+$/.test(e.code) && e.status !== "Deprecated") {
-        const sel = +e.code === builderState.s6.bitmapIndicator ? " selected" : "";
-        html += `<option value="${e.code}"${sel}>${e.code} — ${escHtml(e.meaning)}</option>`;
-      }
-    });
-  } else {
-    html += `<option value="255" selected>255 — No bitmap</option>`;
-  }
-  html += `</select></div>`;
-  html += builderNavHtml(6);
-  return html;
+  return `
+    <h2>Section 6 — Bitmap</h2>
+    <div class="subtitle">Indicates whether a bitmap is included. For an empty data section use 255 (no bitmap).</div>
+    ${bTableHead()}
+      <tr><td><code>1–4</code></td><td>Length of section</td><td><code>6</code> (fixed)</td></tr>
+      <tr><td><code>5</code></td><td>Section number</td><td><code>6</code> (fixed)</td></tr>
+      <tr>
+        <td><code>6</code></td>
+        <td>Bitmap indicator ${bTypeTag("unsigned")}</td>
+        <td>${builderCodeSelect("6.0", builderState.s6.bitmapIndicator, "builderState.s6.bitmapIndicator=+this.value")}</td>
+      </tr>
+    </tbody></table>
+    ${builderNavHtml(6)}`;
 }
 
 // ─────────────────────────────────────────────
 // Builder — Step 7: Section 7 (Data — empty)
 // ─────────────────────────────────────────────
 function renderBuilderStep7() {
-  let html = `<h2>Section 7 — Data</h2>
-    <p class="subtitle">Data section will be empty (5 bytes header only — no packed values).</p>
-    <div style="padding:14px;background:#f9f9f9;border:1px solid #eee;color:#888;font-style:italic">
-      No data — Section 7 will be written as empty (length = 5, section number = 7).
-    </div>`;
-  html += builderNavHtml(7);
-  return html;
+  return `
+    <h2>Section 7 — Data</h2>
+    <div class="subtitle">Contains the packed data values. We leave this section empty (header only).</div>
+    ${bTableHead()}
+      <tr><td><code>1–4</code></td><td>Length of section</td><td><code>5</code> (fixed)</td></tr>
+      <tr><td><code>5</code></td><td>Section number</td><td><code>7</code> (fixed)</td></tr>
+    </tbody></table>
+    <div style="margin-top:10px;color:#666;font-size:12px">No data values included — the data section is empty.</div>
+    ${builderNavHtml(7)}`;
 }
 
 // ─────────────────────────────────────────────
@@ -1224,6 +1294,8 @@ function renderBuilderStep7() {
 // ─────────────────────────────────────────────
 function renderBuilderStep8() {
   const bs = builderState;
+  const allDone = bs.s3.templateId && bs.s4.templateId && bs.s5.templateId;
+
   const disc0  = state.codeIndex.get("0.0");
   const discEntry = disc0 ? disc0.entries.find(e => +e.code === bs.s0.discipline) : null;
   const discLabel = discEntry ? `${bs.s0.discipline} — ${escHtml(discEntry.meaning)}` : String(bs.s0.discipline);
@@ -1232,19 +1304,33 @@ function renderBuilderStep8() {
   const refTime = `${bs.s1.year}-${pad2(bs.s1.month)}-${pad2(bs.s1.day)} ` +
                   `${pad2(bs.s1.hour)}:${pad2(bs.s1.minute)}:${pad2(bs.s1.second)} UTC`;
 
-  const html = `<h2>Build &amp; Download</h2>
-    <p class="subtitle">Review the configuration then download the assembled GRIB2 binary.</p>
+  const gridTpl = state.templateTables.find(t => t.id === bs.s3.templateId);
+  const prodTpl = state.templateTables.find(t => t.id === bs.s4.templateId);
+  const drtTpl  = state.templateTables.find(t => t.id === bs.s5.templateId);
+
+  let html = `<h2>Build &amp; Download GRIB2 File</h2>
+    <div class="subtitle">Review your selections and download the assembled GRIB2 binary.</div>`;
+
+  if (!allDone) {
+    html += `<div style="color:#c00;margin:20px 0;padding:12px;border:1px solid #c00;background:#fff0f0">
+      ⚠ You must select templates for Sections 3, 4, and 5 before building.
+    </div>`;
+    html += `<div class="builder-nav"><button onclick="goToBuilderStep(7)">← Previous</button></div>`;
+    return html;
+  }
+
+  html += `<h3 style="margin:16px 0 8px">Summary</h3>
     <table style="margin-bottom:16px">
-      <thead><tr><th>Section</th><th>Configuration</th></tr></thead>
+      <thead><tr><th>Section</th><th>Choice</th></tr></thead>
       <tbody>
-        <tr><td>Section 0 — Indicator</td><td>Discipline: ${discLabel}, Edition: 2</td></tr>
-        <tr><td>Section 1 — Identification</td><td>Centre: ${bs.s1.originatingCentre}, Ref time: ${refTime}</td></tr>
-        <tr><td>Section 2 — Local Use</td><td>Empty (5 bytes)</td></tr>
-        <tr><td>Section 3 — Grid Definition</td><td>Template: ${bs.s3.templateId || "none"}, Points: ${bs.s3.numberOfDataPoints}</td></tr>
-        <tr><td>Section 4 — Product Definition</td><td>Template: ${bs.s4.templateId || "none"}</td></tr>
-        <tr><td>Section 5 — Data Representation</td><td>Template: ${bs.s5.templateId || "none"}</td></tr>
-        <tr><td>Section 6 — Bitmap</td><td>Bitmap indicator: ${bs.s6.bitmapIndicator}</td></tr>
-        <tr><td>Section 7 — Data</td><td>Empty (5 bytes)</td></tr>
+        <tr><td>0 — Discipline</td><td>${discLabel}</td></tr>
+        <tr><td>1 — Centre</td><td>${bs.s1.originatingCentre} / Sub: ${bs.s1.originatingSubCentre}</td></tr>
+        <tr><td>1 — Ref. Time</td><td>${refTime}</td></tr>
+        <tr><td>3 — Grid</td><td>${bs.s3.templateId} — ${escHtml(gridTpl?.title || "")}</td></tr>
+        <tr><td>4 — Product</td><td>${bs.s4.templateId} — ${escHtml(prodTpl?.title || "")}</td></tr>
+        <tr><td>5 — Data Rep.</td><td>${bs.s5.templateId} — ${escHtml(drtTpl?.title || "")}</td></tr>
+        <tr><td>6 — Bitmap</td><td>${bs.s6.bitmapIndicator}${bs.s6.bitmapIndicator === 255 || bs.s6.bitmapIndicator === "255" ? " (no bitmap)" : ""}</td></tr>
+        <tr><td>7 — Data</td><td>Empty (no data values)</td></tr>
       </tbody>
     </table>
     <div class="builder-nav">
@@ -1446,25 +1532,25 @@ function buildGrib2() {
 // Builder — hex dump & download
 // ─────────────────────────────────────────────
 function hexDump(bytes) {
-  const lines = [];
+  let html = "";
   for (let i = 0; i < bytes.length; i += 16) {
-    const off   = i.toString(16).padStart(8, "0");
-    const chunk = Array.from(bytes.slice(i, i + 16));
-    let hex = "";
-    let asc = "";
+    const off = i.toString(16).padStart(8, "0").toUpperCase();
+    let hexPart = "";
+    let asciiPart = "";
     for (let j = 0; j < 16; j++) {
-      if (j === 8) hex += " ";
-      if (j < chunk.length) {
-        hex += chunk[j].toString(16).padStart(2, "0") + " ";
-        asc += (chunk[j] >= 32 && chunk[j] < 127) ? String.fromCharCode(chunk[j]) : ".";
+      if (i + j < bytes.length) {
+        const b = bytes[i + j];
+        hexPart += b.toString(16).padStart(2, "0").toUpperCase() + " ";
+        asciiPart += (b >= 32 && b < 127) ? String.fromCharCode(b) : ".";
       } else {
-        hex += "   ";
-        asc += " ";
+        hexPart += "   ";
+        asciiPart += " ";
       }
+      if (j === 7) hexPart += " ";
     }
-    lines.push(`${off}  ${hex} |${asc}|`);
+    html += `<span class="hex-offset">${off}</span>  <span class="hex-byte">${hexPart}</span> <span class="hex-ascii">|${asciiPart}|</span>\n`;
   }
-  return lines.join("\n");
+  return html;
 }
 
 function downloadGrib2() {
@@ -1485,7 +1571,7 @@ function toggleHexDump() {
   const dumpEl    = document.getElementById("hex-dump");
   if (!container || !dumpEl) return;
   if (container.style.display === "none") {
-    dumpEl.textContent = hexDump(buildGrib2());
+    dumpEl.innerHTML = hexDump(buildGrib2());
     container.style.display = "block";
   } else {
     container.style.display = "none";
