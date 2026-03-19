@@ -263,6 +263,11 @@
     .btn-download:hover { background: #388e3c !important; }
     .btn-hexdump { background: #1565c0 !important; color: #fff !important; border-color: #1565c0 !important; }
     .btn-hexdump:hover { background: #1976d2 !important; }
+    .btn-upload { display: inline-block; padding: 4px 12px; font-family: monospace; font-size: 13px; cursor: pointer; border: 1px solid #7b1fa2; background: #7b1fa2; color: #fff; user-select: none; }
+    .btn-upload:hover { background: #9c27b0; border-color: #9c27b0; }
+    .load-error { color: #c00; padding: 16px; border: 1px solid #c00; background: #fff0f0; margin-bottom: 12px; }
+    .load-warning { color: #7a4f00; padding: 12px; border: 1px solid #e6a817; background: #fffbe6; margin-bottom: 12px; }
+    .load-warning ul { margin: 6px 0 0; padding-left: 20px; }
 
     /* ── hex dump ── */
     #hex-dump {
@@ -295,7 +300,11 @@
 <div id="topbar">
   <h1>GRIB2 Studio</h1>
   <button id="top-tab-browser" class="active" onclick="switchTopTab('browser')">Browser</button>
-  <button id="top-tab-builder" onclick="switchTopTab('builder')">Builder</button>
+  <button id="top-tab-builder" onclick="switchTopTab('builder')">Editor</button>
+  <label class="builder-only" style="display:none">
+    <input type="file" id="grib2-file-input" accept=".grib2,.grb2,.grb" style="display:none" onchange="loadGrib2File(this)" />
+    <span class="btn-upload">Load GRIB2</span>
+  </label>
   <span class="tab-sep"></span>
   <button id="tab-codes" class="browser-only active" onclick="switchTab('codes')">Code &amp; Flag Tables</button>
   <button id="tab-templates" class="browser-only" onclick="switchTab('templates')">Templates</button>

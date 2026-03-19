@@ -100,6 +100,130 @@ function buildGrib2() {
 }
 
 // ─────────────────────────────────────────────
+// Decoder — inverse of buildGrib2()
+// templateTables param is optional; falls back to global state.templateTables in browser
+// ─────────────────────────────────────────────
+function decodeGrib2(bytes, templateTables) {
+  // eslint-disable-next-line no-undef
+  templateTables = templateTables || (typeof state !== "undefined" ? state.templateTables : []);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const warnings = [];
+
+  // Section 0 — always 16 bytes at offset 0
+  if (bytes.length < 16 ||
+      bytes[0] !== 0x47 || bytes[1] !== 0x52 || bytes[2] !== 0x49 || bytes[3] !== 0x42) {
+    throw new Error("Not a GRIB2 file: missing GRIB magic bytes");
+  }
+  const edition = bytes[7];
+  if (edition !== 2) {
+    throw new Error("Not a GRIB edition 2 file (found edition " + edition + ")");
+  }
+  const discipline = bytes[6];
+
+  let s1 = null, s3 = null, s4 = null, s5 = null, s6 = null;
+  let pos = 16;
+
+  while (pos < bytes.length) {
+    // Check for "7777" end marker
+    if (pos + 4 <= bytes.length &&
+        bytes[pos] === 0x37 && bytes[pos + 1] === 0x37 &&
+        bytes[pos + 2] === 0x37 && bytes[pos + 3] === 0x37) break;
+
+    if (pos + 5 > bytes.length) break; // truncated
+
+    const secLen = readUintN(view, pos, 4);
+    const secNum = view.getUint8(pos + 4);
+
+    if (secLen < 5) {
+      warnings.push("Section at offset " + pos + " has invalid length " + secLen + "; stopping parse");
+      break;
+    }
+
+    if (secNum === 1) {
+      s1 = {
+        originatingCentre:      readUintN(view, pos + 5,  2),
+        originatingSubCentre:   readUintN(view, pos + 7,  2),
+        masterTablesVersion:    view.getUint8(pos + 9),
+        localTablesVersion:     view.getUint8(pos + 10),
+        significanceOfRefTime:  view.getUint8(pos + 11),
+        year:                   readUintN(view, pos + 12, 2),
+        month:                  view.getUint8(pos + 14),
+        day:                    view.getUint8(pos + 15),
+        hour:                   view.getUint8(pos + 16),
+        minute:                 view.getUint8(pos + 17),
+        second:                 view.getUint8(pos + 18),
+        productionStatus:       view.getUint8(pos + 19),
+        typeOfData:             view.getUint8(pos + 20),
+      };
+    } else if (secNum === 2) {
+      // Local use section — skip
+    } else if (secNum === 3) {
+      const tplNum    = readUintN(view, pos + 12, 2);
+      const templateId = "3." + tplNum;
+      const tmpl = templateTables.find(t => t.id === templateId);
+      let fields = {};
+      if (!tmpl) {
+        warnings.push("Grid template " + templateId + " not found in loaded tables; fields left empty");
+      } else {
+        fields = parseTemplateBytes(templateId, bytes.slice(pos + 14, pos + secLen), templateTables);
+      }
+      s3 = {
+        sourceOfGridDef:               view.getUint8(pos + 5),
+        numberOfDataPoints:            readUintN(view, pos + 6, 4),
+        interpretationOfListOfNumbers: view.getUint8(pos + 11),
+        templateId, fields,
+      };
+    } else if (secNum === 4) {
+      const tplNum     = readUintN(view, pos + 7, 2);
+      const templateId = "4." + tplNum;
+      const tmpl = templateTables.find(t => t.id === templateId);
+      let fields = {};
+      if (!tmpl) {
+        warnings.push("Product template " + templateId + " not found in loaded tables; fields left empty");
+      } else {
+        fields = parseTemplateBytes(templateId, bytes.slice(pos + 9, pos + secLen), templateTables);
+      }
+      s4 = {
+        numberOfCoordValues: readUintN(view, pos + 5, 2),
+        templateId, fields,
+      };
+    } else if (secNum === 5) {
+      const tplNum     = readUintN(view, pos + 9, 2);
+      const templateId = "5." + tplNum;
+      const tmpl = templateTables.find(t => t.id === templateId);
+      let fields = {};
+      if (!tmpl) {
+        warnings.push("Data representation template " + templateId + " not found in loaded tables; fields left empty");
+      } else {
+        fields = parseTemplateBytes(templateId, bytes.slice(pos + 11, pos + secLen), templateTables);
+      }
+      s5 = {
+        numberOfPackedValues: readUintN(view, pos + 5, 4),
+        templateId, fields,
+      };
+    } else if (secNum === 6) {
+      s6 = { bitmapIndicator: view.getUint8(pos + 5) };
+    } else if (secNum === 7) {
+      if (secLen > 5) {
+        warnings.push("Section 7 contains " + (secLen - 5) + " bytes of packed data which cannot be decoded. The data section will be empty in the editor.");
+      }
+    }
+
+    pos += secLen;
+  }
+
+  return {
+    s0: { discipline },
+    s1: s1 || {},
+    s3: s3 || { sourceOfGridDef: 0, numberOfDataPoints: 0, interpretationOfListOfNumbers: 0, templateId: null, fields: {} },
+    s4: s4 || { numberOfCoordValues: 0, templateId: null, fields: {} },
+    s5: s5 || { numberOfPackedValues: 0, templateId: null, fields: {} },
+    s6: s6 || { bitmapIndicator: 255 },
+    warnings,
+  };
+}
+
+// ─────────────────────────────────────────────
 // Builder — download & hex dump toggle (DOM-dependent)
 // hexDump() is in js/utils.js
 // ─────────────────────────────────────────────

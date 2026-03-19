@@ -8,9 +8,12 @@ function switchTopTab(tab) {
   document.getElementById("top-tab-browser").classList.toggle("active", tab === "browser");
   document.getElementById("top-tab-builder").classList.toggle("active", tab === "builder");
 
-  // Show / hide browser-only topbar elements
+  // Show / hide browser-only / builder-only topbar elements
   document.querySelectorAll(".browser-only").forEach(el => {
     el.style.display = tab === "browser" ? "" : "none";
+  });
+  document.querySelectorAll(".builder-only").forEach(el => {
+    el.style.display = tab === "builder" ? "" : "none";
   });
 
   // Show / hide content panes
@@ -21,6 +24,50 @@ function switchTopTab(tab) {
     renderBuilderSidebar();
     renderBuilderDetail();
   }
+}
+
+// ─────────────────────────────────────────────
+// Editor — load GRIB2 file and populate builder state
+// ─────────────────────────────────────────────
+function loadGrib2File(input) {
+  const file = input.files[0];
+  input.value = "";
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const bytes = new Uint8Array(e.target.result);
+    let decoded;
+    try {
+      decoded = decodeGrib2(bytes);
+    } catch (err) {
+      document.getElementById("builder-detail").innerHTML =
+        `<div class="load-error"><strong>Failed to load GRIB2 file:</strong><br>${escHtml(err.message)}</div>`;
+      return;
+    }
+
+    Object.assign(builderState.s0, decoded.s0);
+    Object.assign(builderState.s1, decoded.s1);
+    Object.assign(builderState.s3, decoded.s3);
+    Object.assign(builderState.s4, decoded.s4);
+    Object.assign(builderState.s5, decoded.s5);
+    Object.assign(builderState.s6, decoded.s6);
+    for (let i = 0; i <= 7; i++) builderState.completed.add(i);
+    builderState.currentStep = 0;
+
+    renderBuilderSidebar();
+    renderBuilderDetail();
+
+    if (decoded.warnings.length) {
+      const warnItems = decoded.warnings.map(w => `<li>${escHtml(w)}</li>`).join("");
+      const banner = document.createElement("div");
+      banner.className = "load-warning";
+      banner.innerHTML = `<strong>Loaded with ${decoded.warnings.length} warning(s):</strong><ul>${warnItems}</ul>`;
+      const detail = document.getElementById("builder-detail");
+      detail.insertBefore(banner, detail.firstChild);
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 // ─────────────────────────────────────────────

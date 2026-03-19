@@ -14,6 +14,7 @@ const fns = new Function(`
   return {
     getText, parseXML, processCodeFlags, processTemplates,
     parseOctetRange, detectFieldType, writeUintN, writeSintN,
+    readUintN, readSintN, parseTemplateBytes,
     flattenTemplateEntries, buildTemplateBytes, hexDump,
     escHtml, escAttr, highlight, matchesQuery,
   };

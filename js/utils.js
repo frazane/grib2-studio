@@ -198,6 +198,59 @@ function buildTemplateBytes(templateId, fieldValues, templateTables) {
   return new Uint8Array(buf);
 }
 
+function readUintN(view, offset, n) {
+  let value = 0;
+  for (let i = 0; i < n; i++) value = value * 256 + view.getUint8(offset + i);
+  return value;
+}
+
+function readSintN(view, offset, n) {
+  const unsigned = readUintN(view, offset, n);
+  const signBit = Math.pow(2, n * 8 - 1);
+  return unsigned >= signBit ? unsigned - Math.pow(2, n * 8) : unsigned;
+}
+
+// templateTables param is optional; falls back to global state.templateTables in browser
+function parseTemplateBytes(templateId, bytes, templateTables) {
+  // eslint-disable-next-line no-undef
+  templateTables = templateTables || (typeof state !== "undefined" ? state.templateTables : []);
+  if (!templateId) return {};
+  const tmpl = templateTables.find(t => t.id === templateId);
+  if (!tmpl) return {};
+
+  const fields = [];
+  let minOctet = Infinity;
+
+  flattenTemplateEntries(templateId, undefined, templateTables).forEach((entry, idx) => {
+    const range = parseOctetRange(entry.octetNo);
+    if (range.length > 0 && range.start > 0) {
+      fields.push({ ...range, entry, idx });
+      minOctet = Math.min(minOctet, range.start);
+    }
+  });
+
+  if (!fields.length || minOctet === Infinity) return {};
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const result = {};
+
+  fields.forEach(({ start, length, entry, idx }) => {
+    const offset = start - minOctet;
+    if (offset < 0 || offset + length > bytes.byteLength) return;
+    const tableRef = entry.codeTable || entry.flagTable;
+    const ftype = tableRef ? "unsigned" : detectFieldType(entry.contents);
+    if (ftype === "ieeefloat" && length === 4) {
+      result[idx] = view.getFloat32(offset, false);
+    } else if (ftype === "signed") {
+      result[idx] = readSintN(view, offset, length);
+    } else {
+      result[idx] = readUintN(view, offset, length);
+    }
+  });
+
+  return result;
+}
+
 function hexDump(bytes) {
   let html = "";
   for (let i = 0; i < bytes.length; i += 16) {

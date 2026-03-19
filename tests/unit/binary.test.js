@@ -266,6 +266,154 @@ describe("hexDump", () => {
   });
 });
 
+describe("readUintN", () => {
+  it("reads a 1-byte value", () => {
+    const buf = new ArrayBuffer(1);
+    new DataView(buf).setUint8(0, 42);
+    expect(readUintN(new DataView(buf), 0, 1)).toBe(42);
+  });
+  it("reads a 2-byte big-endian value", () => {
+    const buf = new ArrayBuffer(2);
+    const view = new DataView(buf);
+    view.setUint8(0, 0x01); view.setUint8(1, 0x02);
+    expect(readUintN(view, 0, 2)).toBe(0x0102);
+  });
+  it("reads a 4-byte big-endian value", () => {
+    const buf = new ArrayBuffer(4);
+    const view = new DataView(buf);
+    view.setUint8(0, 0x01); view.setUint8(1, 0x02);
+    view.setUint8(2, 0x03); view.setUint8(3, 0x04);
+    expect(readUintN(view, 0, 4)).toBe(0x01020304);
+  });
+  it("reads at a non-zero offset", () => {
+    const buf = new ArrayBuffer(3);
+    new DataView(buf).setUint8(2, 0xff);
+    expect(readUintN(new DataView(buf), 2, 1)).toBe(0xff);
+  });
+  it("reads 0 correctly", () => {
+    const buf = new ArrayBuffer(2);
+    expect(readUintN(new DataView(buf), 0, 2)).toBe(0);
+  });
+  it("round-trips with writeUintN for 1 byte", () => {
+    const buf = new ArrayBuffer(1);
+    const view = new DataView(buf);
+    writeUintN(view, 0, 200, 1);
+    expect(readUintN(view, 0, 1)).toBe(200);
+  });
+  it("round-trips with writeUintN for 4 bytes", () => {
+    const buf = new ArrayBuffer(4);
+    const view = new DataView(buf);
+    writeUintN(view, 0, 123456789, 4);
+    expect(readUintN(view, 0, 4)).toBe(123456789);
+  });
+});
+
+describe("readSintN", () => {
+  it("reads a positive value", () => {
+    const buf = new ArrayBuffer(2);
+    new DataView(buf).setInt16(0, 100);
+    expect(readSintN(new DataView(buf), 0, 2)).toBe(100);
+  });
+  it("reads -1 in 2 bytes (0xFFFF)", () => {
+    const buf = new ArrayBuffer(2);
+    const view = new DataView(buf);
+    view.setUint8(0, 0xff); view.setUint8(1, 0xff);
+    expect(readSintN(view, 0, 2)).toBe(-1);
+  });
+  it("reads -128 in 1 byte (0x80)", () => {
+    const buf = new ArrayBuffer(1);
+    new DataView(buf).setUint8(0, 0x80);
+    expect(readSintN(new DataView(buf), 0, 1)).toBe(-128);
+  });
+  it("reads 0 correctly", () => {
+    const buf = new ArrayBuffer(2);
+    expect(readSintN(new DataView(buf), 0, 2)).toBe(0);
+  });
+  it("round-trips with writeSintN for negative 2-byte value", () => {
+    const buf = new ArrayBuffer(2);
+    const view = new DataView(buf);
+    writeSintN(view, 0, -1000, 2);
+    expect(readSintN(view, 0, 2)).toBe(-1000);
+  });
+  it("round-trips with writeSintN for negative 4-byte value", () => {
+    const buf = new ArrayBuffer(4);
+    const view = new DataView(buf);
+    writeSintN(view, 0, -1000000, 4);
+    expect(readSintN(view, 0, 4)).toBe(-1000000);
+  });
+  it("round-trips with writeSintN for positive value", () => {
+    const buf = new ArrayBuffer(4);
+    const view = new DataView(buf);
+    writeSintN(view, 0, 50000, 4);
+    expect(readSintN(view, 0, 4)).toBe(50000);
+  });
+});
+
+describe("parseTemplateBytes", () => {
+  const mkEntry = (octetNo, contents, codeTable = "") => ({
+    octetNo, contents, codeTable, flagTable: "", note: "", status: "Operational",
+  });
+
+  const templateTables = [
+    {
+      id: "3.0",
+      title: "test",
+      entries: [mkEntry("1-2", "Ni"), mkEntry("3-4", "Nj")],
+    },
+    {
+      id: "5.0",
+      title: "test signed",
+      entries: [mkEntry("1-4", "Binary scale factor E")],
+    },
+    {
+      id: "5.3",
+      title: "test float",
+      entries: [mkEntry("1-4", "Reference value (R) IEEE 754")],
+    },
+  ];
+
+  it("returns empty object for null templateId", () => {
+    expect(parseTemplateBytes(null, new Uint8Array(4), templateTables)).toEqual({});
+  });
+  it("returns empty object for unknown template", () => {
+    expect(parseTemplateBytes("9.9", new Uint8Array(4), templateTables)).toEqual({});
+  });
+  it("reads unsigned field values from correct byte positions", () => {
+    // Build known bytes: Ni=360 (0x0168), Nj=181 (0x00B5)
+    const bytes = new Uint8Array([0x01, 0x68, 0x00, 0xB5]);
+    const result = parseTemplateBytes("3.0", bytes, templateTables);
+    expect(result[0]).toBe(360);
+    expect(result[1]).toBe(181);
+  });
+  it("round-trips buildTemplateBytes → parseTemplateBytes for unsigned fields", () => {
+    const fieldValues = { 0: 720, 1: 361 };
+    const encoded = buildTemplateBytes("3.0", fieldValues, templateTables);
+    const decoded = parseTemplateBytes("3.0", encoded, templateTables);
+    expect(decoded[0]).toBe(720);
+    expect(decoded[1]).toBe(361);
+  });
+  it("round-trips buildTemplateBytes → parseTemplateBytes for signed fields", () => {
+    const fieldValues = { 0: -3 };
+    const encoded = buildTemplateBytes("5.0", fieldValues, templateTables);
+    const decoded = parseTemplateBytes("5.0", encoded, templateTables);
+    expect(decoded[0]).toBe(-3);
+  });
+  it("round-trips buildTemplateBytes → parseTemplateBytes for IEEE float fields", () => {
+    const fieldValues = { 0: 1.5 };
+    const encoded = buildTemplateBytes("5.3", fieldValues, templateTables);
+    const decoded = parseTemplateBytes("5.3", encoded, templateTables);
+    expect(decoded[0]).toBeCloseTo(1.5, 5);
+  });
+  it("skips fields that would be out of bounds", () => {
+    // Pass a truncated buffer (only 2 bytes for a 4-byte template)
+    const short = new Uint8Array(2);
+    const result = parseTemplateBytes("3.0", short, templateTables);
+    // First field (1-2) fits; second field (3-4) does not
+    expect(result[0]).toBeDefined();
+    expect(result[1]).toBeUndefined();
+  });
+});
+
 describe("buildTemplateBytes", () => {
   const mkEntry = (octetNo, contents, codeTable = "") => ({
     octetNo, contents, codeTable, flagTable: "", note: "", status: "Operational",
