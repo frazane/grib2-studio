@@ -34,21 +34,21 @@ async function init() {
   }
 
   try {
-    setProgress(10, "Fetching CodeFlag.xml…");
-    const cfText = await fetch(CODEFLAG_URL).then(r => {
-      if (!r.ok) throw new Error("Failed to fetch CodeFlag.xml: " + r.status);
-      return r.text();
-    });
+    setProgress(10, "Fetching data files…");
+    const [cfText, tpText] = await Promise.all([
+      fetch(CODEFLAG_URL).then(r => {
+        if (!r.ok) throw new Error("Failed to fetch CodeFlag.xml: " + r.status);
+        return r.text();
+      }),
+      fetch(TEMPLATE_URL).then(r => {
+        if (!r.ok) throw new Error("Failed to fetch Template.xml: " + r.status);
+        return r.text();
+      }),
+    ]);
 
-    setProgress(45, "Parsing codes & flags…");
+    setProgress(70, "Parsing codes & flags…");
     const cfDoc = parseXML(cfText);
     const { tables: codeTables, index: codeIndex } = processCodeFlags(cfDoc);
-
-    setProgress(55, "Fetching Template.xml…");
-    const tpText = await fetch(TEMPLATE_URL).then(r => {
-      if (!r.ok) throw new Error("Failed to fetch Template.xml: " + r.status);
-      return r.text();
-    });
 
     setProgress(88, "Parsing templates…");
     const tpDoc = parseXML(tpText);
