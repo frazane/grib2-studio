@@ -505,6 +505,46 @@ function renderBuilderStep7() {
 }
 
 // ─────────────────────────────────────────────
+// Builder — field range validation
+// Returns array of {section, label, value, min, max} for out-of-range fields
+// ─────────────────────────────────────────────
+function collectFieldWarnings() {
+  const warnings = [];
+  const sections = [
+    { key: "s3", label: "Section 3 (Grid)" },
+    { key: "s4", label: "Section 4 (Product)" },
+    { key: "s5", label: "Section 5 (Data Rep.)" },
+  ];
+  sections.forEach(({ key, label }) => {
+    const sec = builderState[key];
+    if (!sec.templateId) return;
+    flattenTemplateEntries(sec.templateId).forEach((entry, idx) => {
+      const range = parseOctetRange(entry.octetNo);
+      if (range.length === 0) return;
+      const raw   = sec.fields[idx];
+      const value = (raw !== undefined && raw !== "") ? parseFloat(raw) : 0;
+      if (isNaN(value)) return;
+      const tableRef = entry.codeTable || entry.flagTable;
+      const ftype    = tableRef ? "unsigned" : detectFieldType(entry.contents);
+      if (ftype === "ieeefloat") return;
+      const n = range.length;
+      let min, max;
+      if (ftype === "signed") {
+        min = -Math.pow(2, n * 8 - 1);
+        max =  Math.pow(2, n * 8 - 1) - 1;
+      } else {
+        min = 0;
+        max = Math.pow(2, n * 8) - 1;
+      }
+      if (value < min || value > max) {
+        warnings.push({ section: label, label: entry.contents, value, min, max });
+      }
+    });
+  });
+  return warnings;
+}
+
+// ─────────────────────────────────────────────
 // Builder — Step 8: Build & Download
 // ─────────────────────────────────────────────
 function renderBuilderStep8() {
@@ -534,6 +574,8 @@ function renderBuilderStep8() {
     return html;
   }
 
+  const warnings = collectFieldWarnings();
+
   html += `<h3 style="margin:16px 0 8px">Summary</h3>
     <table style="margin-bottom:16px">
       <thead><tr><th>Section</th><th>Choice</th></tr></thead>
@@ -541,14 +583,25 @@ function renderBuilderStep8() {
         <tr><td>0 — Discipline</td><td>${discLabel}</td></tr>
         <tr><td>1 — Centre</td><td>${bs.s1.originatingCentre} / Sub: ${bs.s1.originatingSubCentre}</td></tr>
         <tr><td>1 — Ref. Time</td><td>${refTime}</td></tr>
-        <tr><td>3 — Grid</td><td>${bs.s3.templateId} — ${escHtml(gridTpl?.title || "")}</td></tr>
-        <tr><td>4 — Product</td><td>${bs.s4.templateId} — ${escHtml(prodTpl?.title || "")}</td></tr>
-        <tr><td>5 — Data Rep.</td><td>${bs.s5.templateId} — ${escHtml(drtTpl?.title || "")}</td></tr>
-        <tr><td>6 — Bitmap</td><td>${bs.s6.bitmapIndicator}${bs.s6.bitmapIndicator === 255 || bs.s6.bitmapIndicator === "255" ? " (no bitmap)" : ""}</td></tr>
+        <tr><td>3 — Grid</td><td>${escHtml(bs.s3.templateId)} — ${escHtml(gridTpl?.title || "")}</td></tr>
+        <tr><td>4 — Product</td><td>${escHtml(bs.s4.templateId)} — ${escHtml(prodTpl?.title || "")}</td></tr>
+        <tr><td>5 — Data Rep.</td><td>${escHtml(bs.s5.templateId)} — ${escHtml(drtTpl?.title || "")}</td></tr>
+        <tr><td>6 — Bitmap</td><td>${bs.s6.bitmapIndicator === 255 ? "255 (no bitmap)" : bs.s6.bitmapIndicator}</td></tr>
         <tr><td>7 — Data</td><td>Empty (no data values)</td></tr>
       </tbody>
-    </table>
-    <div class="builder-nav">
+    </table>`;
+
+  if (warnings.length) {
+    html += `<div style="color:#7a4f00;margin:0 0 16px;padding:12px;border:1px solid #e6a817;background:#fffbe6">
+      <strong>⚠ ${warnings.length} field value${warnings.length !== 1 ? "s" : ""} out of range — will be clamped on download:</strong>
+      <ul style="margin:8px 0 0;padding-left:20px">`;
+    warnings.forEach(w => {
+      html += `<li>${escHtml(w.section)}: <em>${escHtml(w.label)}</em> — value ${w.value} is outside [${w.min}, ${w.max}]</li>`;
+    });
+    html += `</ul></div>`;
+  }
+
+  html += `<div class="builder-nav">
       <button onclick="goToBuilderStep(7)">← Previous</button>
       <button class="btn-download" onclick="downloadGrib2()">⬇ Download .grib2</button>
       <button class="btn-hexdump" onclick="toggleHexDump()">⎙ Hex Dump</button>
