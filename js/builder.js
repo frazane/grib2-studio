@@ -146,7 +146,8 @@ function builderCodeSelect(tableId, curVal, onchangeExpr) {
 }
 
 // Type badge helper
-function bTypeTag(ftype) {
+// inferred=true adds a tooltip indicating the type was detected from the field description
+function bTypeTag(ftype, inferred = false) {
   const map = {
     codetable: ["type-codetable", "codetable"],
     ieeefloat: ["type-float",     "IEEE float"],
@@ -154,7 +155,8 @@ function bTypeTag(ftype) {
     unsigned:  ["type-unsigned",  "unsigned"],
   };
   const [cls, label] = map[ftype] || ["type-unsigned", "unsigned"];
-  return `<span class="type-tag ${cls}">${label}</span>`;
+  const title = inferred ? ` title="type inferred from field description"` : "";
+  return `<span class="type-tag ${cls}"${title}>${label}</span>`;
 }
 
 // Standard table header for builder sections
@@ -329,8 +331,9 @@ function renderTemplateStep(stepId, sectionKey, heading, subtitle, templatePrefi
       flattenTemplateEntries(bs.templateId).forEach((entry, idx) => {
         const range = parseOctetRange(entry.octetNo);
         if (range.length === 0) return;
-        const tableRef = entry.codeTable || entry.flagTable;
-        const ftype    = tableRef ? "codetable" : detectFieldType(entry.contents);
+        const tableRef  = entry.codeTable || entry.flagTable;
+        const ftype     = tableRef ? "codetable" : detectFieldType(entry.contents);
+        const inferred  = !tableRef;
         const curVal   = bs.fields[idx] !== undefined ? bs.fields[idx] : 0;
         const byteCount = range.length;
 
@@ -357,7 +360,7 @@ function renderTemplateStep(stepId, sectionKey, heading, subtitle, templatePrefi
 
         html += `<tr>
           <td><code>${escHtml(entry.octetNo)}</code></td>
-          <td>${escHtml(entry.contents)} ${bTypeTag(ftype)}</td>
+          <td>${escHtml(entry.contents)} ${bTypeTag(ftype, inferred)}</td>
           <td>${valueCell}</td>
         </tr>`;
       });
