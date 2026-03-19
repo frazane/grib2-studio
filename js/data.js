@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────
+const APP_VERSION        = "0.1.0";
 const WMO_TABLES_VERSION = "v36";
 const CODEFLAG_URL = "data/CodeFlag.xml";
 const TEMPLATE_URL = "data/Template.xml";
@@ -65,7 +66,7 @@ async function init() {
     state.codeIndex      = codeIndex;
 
     document.getElementById("status").textContent =
-      `${codeTables.length} code/flag tables · ${templateTables.length} templates · WMO ${WMO_TABLES_VERSION}`;
+      `${codeTables.length} code/flag tables · ${templateTables.length} templates · WMO tables ${WMO_TABLES_VERSION} · app v${APP_VERSION}`;
 
     loadingEl.style.display = "none";
     renderSidebar();
