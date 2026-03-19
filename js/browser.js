@@ -42,16 +42,6 @@ function renderSidebar(filter = "") {
   sidebar.innerHTML = html || `<div style="padding:12px;color:#aaa">No results</div>`;
 }
 
-function matchesQuery(table, q) {
-  if (table.title.toLowerCase().includes(q)) return true;
-  if (table.id.includes(q)) return true;
-  return table.entries.some(e =>
-    (e.meaning || e.contents || "").toLowerCase().includes(q) ||
-    (e.code || "").toLowerCase() === q ||
-    (e.code || "").toLowerCase().includes(q)
-  );
-}
-
 // ─────────────────────────────────────────────
 // Select a table from sidebar
 // ─────────────────────────────────────────────
@@ -259,23 +249,4 @@ function renderSearchResults(query) {
   detail.innerHTML = html;
 }
 
-// Highlight matching text
-function highlight(text, query) {
-  const q = escHtml(query);
-  const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, "gi");
-  return text.replace(re, `<mark>$1</mark>`);
-}
-
-// ─────────────────────────────────────────────
-// Utilities
-// ─────────────────────────────────────────────
-function escHtml(s) {
-  return (s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-function escAttr(s) {
-  return (s ?? "").replace(/'/g, "\\'");
-}
+// escHtml, escAttr, highlight, matchesQuery are in js/utils.js

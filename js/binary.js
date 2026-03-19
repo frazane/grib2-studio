@@ -1,107 +1,7 @@
 // ─────────────────────────────────────────────
-// Builder — binary utilities
+// parseOctetRange, detectFieldType, writeUintN, writeSintN,
+// flattenTemplateEntries, buildTemplateBytes, hexDump are in js/utils.js
 // ─────────────────────────────────────────────
-function parseOctetRange(octetStr) {
-  if (!octetStr) return { start: 0, length: 0 };
-  const m = String(octetStr).match(/^(\d+)(?:\s*[-–]\s*(\d+))?/);
-  if (!m) return { start: 0, length: 0 };
-  const start = parseInt(m[1], 10);
-  const end   = m[2] ? parseInt(m[2], 10) : start;
-  if (end < start) return { start: 0, length: 0 };
-  return { start, length: end - start + 1 };
-}
-
-function detectFieldType(contents) {
-  const s = contents || "";
-  if (/reference\s*value/i.test(s) || /referenceValue/i.test(s) || /IEEE/i.test(s))
-    return "ieeefloat";
-  if (/\bLa1\b/.test(s) || /\bLa2\b/.test(s) || /\bLaD\b/.test(s) ||
-      /\bLatin1\b/.test(s) || /\bLatin2\b/.test(s) ||
-      /latitude/i.test(s) || /forecastTime/i.test(s) || /forecast\s+time/i.test(s) ||
-      /scale\s*factor/i.test(s) || /scaleFactor/i.test(s) ||
-      /binary\s*scale/i.test(s) || /decimal\s*scale/i.test(s) ||
-      /latitude.*pole/i.test(s) || /angle.*rotation/i.test(s))
-    return "signed";
-  return "unsigned";
-}
-
-function writeUintN(view, offset, value, n) {
-  let v = Math.round(isNaN(value) ? 0 : Math.max(0, value));
-  for (let i = n - 1; i >= 0; i--) {
-    view.setUint8(offset + i, v & 0xff);
-    v = Math.floor(v / 256);
-  }
-}
-
-function writeSintN(view, offset, value, n) {
-  let v = Math.round(isNaN(value) ? 0 : value);
-  const minVal = -Math.pow(2, n * 8 - 1);
-  const maxVal =  Math.pow(2, n * 8 - 1) - 1;
-  v = Math.max(minVal, Math.min(maxVal, v));
-  if (v < 0) v += Math.pow(2, n * 8);
-  writeUintN(view, offset, v, n);
-}
-
-function flattenTemplateEntries(templateId, visited) {
-  visited = visited || new Set();
-  if (visited.has(templateId)) return [];
-  visited.add(templateId);
-  const tmpl = state.templateTables.find(t => t.id === templateId);
-  if (!tmpl) return [];
-  const result = [];
-  tmpl.entries.forEach(entry => {
-    const m = /same\s+as\s+.*?(\d+\.\d+)/i.exec(entry.contents);
-    if (m) {
-      const sub = flattenTemplateEntries(m[1], visited);
-      if (sub.length) { sub.forEach(e => result.push(e)); return; }
-    }
-    result.push(entry);
-  });
-  return result;
-}
-
-function buildTemplateBytes(templateId, fieldValues) {
-  if (!templateId) return new Uint8Array(0);
-  const tmpl = state.templateTables.find(t => t.id === templateId);
-  if (!tmpl) return new Uint8Array(0);
-
-  const fields = [];
-  let minOctet = Infinity;
-  let maxOctet = 0;
-
-  flattenTemplateEntries(templateId).forEach((entry, idx) => {
-    const range = parseOctetRange(entry.octetNo);
-    if (range.length > 0 && range.start > 0) {
-      fields.push({ ...range, entry, idx });
-      minOctet = Math.min(minOctet, range.start);
-      maxOctet = Math.max(maxOctet, range.start + range.length - 1);
-    }
-  });
-
-  if (!fields.length || minOctet === Infinity) return new Uint8Array(0);
-
-  const buf  = new ArrayBuffer(maxOctet - minOctet + 1);
-  const view = new DataView(buf);
-
-  fields.forEach(({ start, length, entry, idx }) => {
-    const rawVal   = fieldValues[idx];
-    const parsed   = (rawVal !== undefined && rawVal !== "") ? parseFloat(rawVal) : NaN;
-    const value    = isNaN(parsed) ? 0 : parsed;
-    const tableRef = entry.codeTable || entry.flagTable;
-    const ftype    = tableRef ? "unsigned" : detectFieldType(entry.contents);
-    const offset   = start - minOctet;
-
-    if (ftype === "ieeefloat" && length === 4) {
-      view.setFloat32(offset, value, false); // big-endian
-    } else if (ftype === "signed") {
-      writeSintN(view, offset, value, length);
-    } else {
-      writeUintN(view, offset, Math.max(0, value), length);
-    }
-  });
-
-  return new Uint8Array(buf);
-}
 
 // ─────────────────────────────────────────────
 // Builder — GRIB2 binary assembly
@@ -200,30 +100,9 @@ function buildGrib2() {
 }
 
 // ─────────────────────────────────────────────
-// Builder — hex dump & download
+// Builder — download & hex dump toggle (DOM-dependent)
+// hexDump() is in js/utils.js
 // ─────────────────────────────────────────────
-function hexDump(bytes) {
-  let html = "";
-  for (let i = 0; i < bytes.length; i += 16) {
-    const off = i.toString(16).padStart(8, "0").toUpperCase();
-    let hexPart = "";
-    let asciiPart = "";
-    for (let j = 0; j < 16; j++) {
-      if (i + j < bytes.length) {
-        const b = bytes[i + j];
-        hexPart += b.toString(16).padStart(2, "0").toUpperCase() + " ";
-        asciiPart += (b >= 32 && b < 127) ? String.fromCharCode(b) : ".";
-      } else {
-        hexPart += "   ";
-        asciiPart += " ";
-      }
-      if (j === 7) hexPart += " ";
-    }
-    html += `<span class="hex-offset">${off}</span>  <span class="hex-byte">${hexPart}</span> <span class="hex-ascii">|${asciiPart}|</span>\n`;
-  }
-  return html;
-}
-
 function downloadGrib2() {
   const bytes = buildGrib2();
   const blob  = new Blob([bytes], { type: "application/octet-stream" });

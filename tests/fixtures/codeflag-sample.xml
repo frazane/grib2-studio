@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <GRIB2_CodeFlag_en>
+    <Title_en>Code table 0.0 - Discipline of processed data</Title_en>
+    <SubTitle_en></SubTitle_en>
+    <CodeFlag>0</CodeFlag>
+    <MeaningParameterDescription_en>Meteorological products</MeaningParameterDescription_en>
+    <Status>Operational</Status>
+  </GRIB2_CodeFlag_en>
+  <GRIB2_CodeFlag_en>
+    <Title_en>Code table 0.0 - Discipline of processed data</Title_en>
+    <SubTitle_en></SubTitle_en>
+    <CodeFlag>1</CodeFlag>
+    <MeaningParameterDescription_en>Hydrological products</MeaningParameterDescription_en>
+    <Status>Operational</Status>
+  </GRIB2_CodeFlag_en>
+  <GRIB2_CodeFlag_en>
+    <Title_en>Code table 1.0 - GRIB Master Tables Version Number</Title_en>
+    <SubTitle_en></SubTitle_en>
+    <CodeFlag>2</CodeFlag>
+    <MeaningParameterDescription_en>Version implemented on 4 November 2003</MeaningParameterDescription_en>
+    <Status>Operational</Status>
+  </GRIB2_CodeFlag_en>
+  <GRIB2_CodeFlag_en>
+    <Title_en>Flag table 3.3 - Resolution and component flags</Title_en>
+    <SubTitle_en></SubTitle_en>
+    <CodeFlag>1</CodeFlag>
+    <MeaningParameterDescription_en>i direction increments given</MeaningParameterDescription_en>
+    <Status>Operational</Status>
+  </GRIB2_CodeFlag_en>
+  <GRIB2_CodeFlag_en>
+    <Title_en>Not a valid title pattern</Title_en>
+    <SubTitle_en></SubTitle_en>
+    <CodeFlag>0</CodeFlag>
+    <MeaningParameterDescription_en>Should be ignored</MeaningParameterDescription_en>
+    <Status>Operational</Status>
+  </GRIB2_CodeFlag_en>
+</root>

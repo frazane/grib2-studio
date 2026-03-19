@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <GRIB2_Template_en>
+    <Title_en>Grid definition template 3.0 - latitude/longitude</Title_en>
+    <OctetNo>1-4</OctetNo>
+    <Contents_en>Ni - Number of points along a parallel</Contents_en>
+    <Note_en></Note_en>
+    <noteIDs></noteIDs>
+    <codeTable></codeTable>
+    <flagTable></flagTable>
+    <Status>Operational</Status>
+  </GRIB2_Template_en>
+  <GRIB2_Template_en>
+    <Title_en>Grid definition template 3.0 - latitude/longitude</Title_en>
+    <OctetNo>5-8</OctetNo>
+    <Contents_en>Nj - Number of points along a meridian</Contents_en>
+    <Note_en></Note_en>
+    <noteIDs></noteIDs>
+    <codeTable></codeTable>
+    <flagTable></flagTable>
+    <Status>Operational</Status>
+  </GRIB2_Template_en>
+  <GRIB2_Template_en>
+    <Title_en>Product definition template 4.0 - analysis or forecast at a horizontal level</Title_en>
+    <OctetNo>1</OctetNo>
+    <Contents_en>Parameter category</Contents_en>
+    <Note_en></Note_en>
+    <noteIDs></noteIDs>
+    <codeTable>4.1</codeTable>
+    <flagTable></flagTable>
+    <Status>Operational</Status>
+  </GRIB2_Template_en>
+  <GRIB2_Template_en>
+    <Title_en>Product definition template 4.0 - analysis or forecast at a horizontal level</Title_en>
+    <OctetNo>2</OctetNo>
+    <Contents_en>Parameter number</Contents_en>
+    <Note_en></Note_en>
+    <noteIDs></noteIDs>
+    <codeTable>4.2.0.0</codeTable>
+    <flagTable></flagTable>
+    <Status>Operational</Status>
+  </GRIB2_Template_en>
+</root>
