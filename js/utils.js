@@ -294,6 +294,7 @@ function highlight(text, query) {
 }
 
 function matchesQuery(table, q) {
+  if (table.searchable) return table.searchable.includes(q);
   if (table.title.toLowerCase().includes(q)) return true;
   if (table.id.includes(q)) return true;
   return table.entries.some(e =>

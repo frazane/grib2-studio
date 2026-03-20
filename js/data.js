@@ -64,6 +64,7 @@ async function init() {
     state.codeTables     = codeTables;
     state.templateTables = templateTables;
     state.codeIndex      = codeIndex;
+    buildSearchIndex();
 
     document.getElementById("status").textContent =
       `${codeTables.length} code/flag tables · ${templateTables.length} templates · WMO tables ${WMO_TABLES_VERSION} · app v${APP_VERSION}`;

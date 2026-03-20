@@ -1,4 +1,37 @@
 // ─────────────────────────────────────────────
+// Search index — built once at init time
+// ─────────────────────────────────────────────
+function buildSearchIndex() {
+  state.codeTables.forEach(table => {
+    table.searchable = [
+      table.type, table.id, table.title,
+      ...table.entries.map(e => (e.meaning || "") + " " + (e.code || ""))
+    ].join(" ").toLowerCase();
+  });
+  state.templateTables.forEach(table => {
+    table.searchable = [
+      table.type, table.id, table.title,
+      ...table.entries.map(e => (e.contents || "") + " " + (e.note || ""))
+    ].join(" ").toLowerCase();
+  });
+
+  state.codeSearchIndex = state.codeTables.flatMap(table =>
+    table.entries.map(e => ({
+      haystack: [table.type, table.id, table.title, e.code || "", e.meaning || ""].join(" ").toLowerCase(),
+      table, entry: e,
+    }))
+  );
+  state.templateSearchIndex = state.templateTables.flatMap(table =>
+    table.entries.map(e => ({
+      haystack: [table.type, table.id, table.title, e.contents || "", e.note || ""].join(" ").toLowerCase(),
+      table, entry: e,
+    }))
+  );
+}
+
+const MAX_SEARCH_RESULTS = 200;
+
+// ─────────────────────────────────────────────
 // Tab switching (editor | tables | templates)
 // ─────────────────────────────────────────────
 function switchTab(tab) {
@@ -185,8 +218,26 @@ function goToTable(id, tab) {
 // ─────────────────────────────────────────────
 // Search
 // ─────────────────────────────────────────────
+let _searchTimer = null;
+
 function onSearch(query) {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => _doSearch(query), 80);
+}
+
+function _doSearch(query) {
   state.searchQuery = query.trim();
+
+  // If on editor tab, switch to tables view to show search results
+  if (state.tab === "editor" && state.searchQuery) {
+    state.tab = "tables";
+    document.getElementById("tab-editor").classList.remove("active");
+    document.getElementById("tab-tables").classList.add("active");
+    document.getElementById("tab-templates").classList.remove("active");
+    document.getElementById("load-grib2-label").style.display = "none";
+    document.getElementById("browser-content").style.display = "flex";
+    document.getElementById("builder-main").style.display = "none";
+  }
 
   if (!state.searchQuery) {
     state.selectedTableId = null;
@@ -204,23 +255,8 @@ function renderSearchResults(query) {
   const q = query.toLowerCase();
   const detail = document.getElementById("detail");
 
-  // Gather hits from code/flag tables
-  let codeHits = [];
-  state.codeTables.forEach(table => {
-    table.entries.forEach(e => {
-      const haystack = [table.type, table.id, table.title, e.code || "", e.meaning || ""].join(" ").toLowerCase();
-      if (haystack.includes(q)) codeHits.push({ table, entry: e });
-    });
-  });
-
-  // Gather hits from template tables
-  let templateHits = [];
-  state.templateTables.forEach(table => {
-    table.entries.forEach(e => {
-      const haystack = [table.type, table.id, table.title, e.contents || "", e.note || ""].join(" ").toLowerCase();
-      if (haystack.includes(q)) templateHits.push({ table, entry: e });
-    });
-  });
+  const codeHits     = state.codeSearchIndex.filter(item => item.haystack.includes(q));
+  const templateHits = state.templateSearchIndex.filter(item => item.haystack.includes(q));
 
   const totalHits = codeHits.length + templateHits.length;
   if (!totalHits) {
@@ -228,9 +264,15 @@ function renderSearchResults(query) {
     return;
   }
 
-  let html = `<h3 style="margin-bottom:12px">${totalHits} result${totalHits !== 1 ? "s" : ""} for "${escHtml(query)}"</h3>`;
+  const codeShow     = codeHits.slice(0, MAX_SEARCH_RESULTS);
+  const templateShow = templateHits.slice(0, MAX_SEARCH_RESULTS - codeShow.length);
+  const shown = codeShow.length + templateShow.length;
 
-  if (codeHits.length > 0) {
+  let html = `<h3 style="margin-bottom:12px">${totalHits} result${totalHits !== 1 ? "s" : ""} for "${escHtml(query)}"`;
+  if (shown < totalHits) html += ` <span style="font-size:12px;color:#888">(showing first ${shown})</span>`;
+  html += `</h3>`;
+
+  if (codeShow.length > 0) {
     html += `<h4 style="margin:12px 0 6px;color:#555">Code &amp; Flag Tables (${codeHits.length})</h4>
       <table><thead><tr>
         <th style="width:140px">Table</th>
@@ -238,7 +280,7 @@ function renderSearchResults(query) {
         <th>Meaning</th>
         <th style="width:90px">Status</th>
       </tr></thead><tbody>`;
-    codeHits.forEach(({ table, entry: e }) => {
+    codeShow.forEach(({ table, entry: e }) => {
       const statusCls = e.status === "Deprecated" ? "status-deprecated" : "status-operational";
       const tableRef = `<a class="ref-link" onclick="goToTable('${escAttr(table.id)}','tables')">${escHtml(table.type)} ${escHtml(table.id)}</a>`;
       html += `<tr>
@@ -251,7 +293,7 @@ function renderSearchResults(query) {
     html += `</tbody></table>`;
   }
 
-  if (templateHits.length > 0) {
+  if (templateShow.length > 0) {
     html += `<h4 style="margin:16px 0 6px;color:#555">Templates (${templateHits.length})</h4>
       <table><thead><tr>
         <th style="width:140px">Table</th>
@@ -259,7 +301,7 @@ function renderSearchResults(query) {
         <th>Contents</th>
         <th style="width:90px">Status</th>
       </tr></thead><tbody>`;
-    templateHits.forEach(({ table, entry: e }) => {
+    templateShow.forEach(({ table, entry: e }) => {
       const statusCls = e.status === "Deprecated" ? "status-deprecated" : "status-operational";
       const tableRef = `<a class="ref-link" onclick="goToTable('${escAttr(table.id)}','templates')">${escHtml(table.type)} ${escHtml(table.id)}</a>`;
       html += `<tr>
